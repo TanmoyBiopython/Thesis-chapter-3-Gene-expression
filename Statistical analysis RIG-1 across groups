@@ -1,0 +1,131 @@
+# Load required libraries
+# install.packages(c("ggplot2", "dplyr", "rstatix", "ggpubr"))
+library(ggplot2)
+library(dplyr)
+library(rstatix)
+library(ggpubr)
+
+# ============================================================
+# RIG-1 Data
+# ============================================================
+gbs <- c(0.80, 0.40, 2.82, 0.39, 0.77, 2.85, 3.29, 3.42, 1.02, 2.90,
+         1.02, 9.99, 0.33, 0.96, 2.26, 5.51, 2.24, 3.66, 0.98, 4.60,
+         1.13, 1.21, 1.08)
+
+sle <- c(3.97, 2.88, 1.57, 7.34, 5.30, 2.11, 0.89, 1.60, 1.23, 1.30,
+         1.38, 1.28, 2.46, 7.87, 1.55, 7.90, 2.27, 1.33, 3.67, 6.49,
+         1.59, 2.50, 1.00)
+
+ms <- c(0.58, 3.63, 1.51, 2.73, 0.89, 0.38, 0.74, 1.67, 6.08, 2.20,
+        0.29, 9.68, 2.90, 1.61, 5.44, 0.40, 2.95, 1.71, 0.33, 2.00,
+        0.31, 0.99, 1.49)
+
+hc_ddct <- c(-2.75, 1.60, -0.27, -0.13, 1.51, 0.02, -1.40, -0.59, -0.04,
+             -2.15, 5.02, 1.91, 3.02, 1.41, -1.46, -1.38, -0.57, -4.78,
+             -1.62, 1.10, -1.55, -0.21, 3.31)
+
+# ============================================================
+# 1. Descriptive Summary (Fold Change Scale)
+# ============================================================
+cat("\n--- Descriptive summary — RIG-1 fold change ---\n")
+fc_table <- data.frame(
+  Group = c("GBS", "SLE", "MS", "HC QC"),
+  n = c(23, 23, 23, 23),
+  Mean_FC = c(round(mean(gbs),2), round(mean(sle),2), round(mean(ms),2), "ΔΔCt mean ≈ -0.04"),
+  Median_FC = c(round(median(gbs),2), round(median(sle),2), round(median(ms),2), "ΔΔCt median = -0.13"),
+  IQR = c("0.98–3.29", "1.38–5.30", "0.74–2.95", "-1.46–1.41"),
+  Min = c(round(min(gbs),2), round(min(sle),2), round(min(ms),2), round(min(hc_ddct),2)),
+  Max = c(round(max(gbs),2), round(max(sle),2), round(max(ms),2), round(max(hc_ddct),2)),
+  SD = c(round(sd(gbs),2), round(sd(sle),2), round(sd(ms),2), round(sd(hc_ddct),2))
+)
+print(fc_table)
+
+# ============================================================
+# 2. Kruskal-Wallis
+# ============================================================
+# Transform all to log2 scale (HC: log2FC = -ddCt)
+values <- c(log2(gbs), log2(sle), log2(ms), -hc_ddct)
+group  <- factor(rep(c("GBS", "SLE", "MS", "HC"), each = 23),
+                 levels = c("HC", "GBS", "SLE", "MS"))
+
+kw <- kruskal.test(values ~ group)
+cat("\n--- Kruskal-Wallis results ---\n")
+cat("H =", round(kw$statistic, 2), "\n")
+cat("df =", kw$parameter, "\n")
+cat("p ≈", format.pval(kw$p.value, digits = 3), "\n")
+
+# ============================================================
+# 3. Dunn post-hoc tests (Holm)
+# ============================================================
+cat("\n--- Dunn post-hoc tests (Holm-adjusted) ---\n")
+dunn_res <- dunn_test(data.frame(value=values, group=group), value ~ group, p.adjust.method = "holm")
+print(dunn_res)
+
+# ============================================================
+# 4. Descriptive Summary on log2 scale
+# ============================================================
+cat("\n--- 1. Descriptive summary on log2 scale ---\n")
+log2_table <- data.frame(
+  Group = c("GBS", "SLE", "MS", "HC QC"),
+  n = c(23, 23, 23, 23),
+  Median_log2_FC = c(round(log2(median(gbs)),2), round(log2(median(sle)),2), round(log2(median(ms)),2), round(-median(hc_ddct),2)),
+  IQR_log2_FC = c(
+    paste0(round(log2(quantile(gbs, 0.25)),2), " to ", round(log2(quantile(gbs, 0.75)),2)),
+    paste0(round(log2(quantile(sle, 0.25)),2), " to ", round(log2(quantile(sle, 0.75)),2)),
+    paste0(round(log2(quantile(ms, 0.25)),2), " to ", round(log2(quantile(ms, 0.75)),2)),
+    paste0(round(-quantile(hc_ddct, 0.75),2), " to ", round(-quantile(hc_ddct, 0.25),2))
+  ),
+  Median_FC = c(round(median(gbs),2), round(median(sle),2), round(median(ms),2), round(2^(-median(hc_ddct)),2)),
+  IQR_FC = c(
+    paste0(round(quantile(gbs, 0.25),2), " to ", round(quantile(gbs, 0.75),2)),
+    paste0(round(quantile(sle, 0.25),2), " to ", round(quantile(sle, 0.75),2)),
+    paste0(round(quantile(ms, 0.25),2), " to ", round(quantile(ms, 0.75),2)),
+    paste0(round(2^(-quantile(hc_ddct, 0.75)),2), " to ", round(2^(-quantile(hc_ddct, 0.25)),2))
+  )
+)
+print(log2_table)
+
+# ============================================================
+# 5. Plot
+# ============================================================
+df <- data.frame(value = values, group = group)
+
+# Get significant Dunn comparisons for plotting (will be empty if none are significant)
+dunn_sig <- dunn_res %>% filter(p.adj < 0.05)
+
+p <- ggplot(df, aes(x = group, y = value, fill = group)) +
+  geom_boxplot(width = 0.55, outlier.shape = NA, alpha = 0.6, color = "grey20", linewidth = 0.5) +
+  geom_jitter(width = 0.15, size = 2.5, alpha = 0.85, shape = 21, color = "black", stroke = 0.4) +
+  scale_fill_manual(values = c(HC = "#4C72B0", GBS = "#DD8452", 
+                               SLE = "#55A868", MS = "#C44E52")) +
+  labs(
+    x = NULL,
+    y = expression(bold(log[2]~"fold change of RIG-1")),
+    title = "RIG-1 expression across study groups",
+    subtitle = paste0("Kruskal-Wallis p = ", format.pval(kw$p.value, digits = 3), 
+                      "  |  Dunn post-hoc, Holm-adjusted")
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(color = "grey30", size = 11),
+    axis.text = element_text(color = "black", size = 12),
+    axis.title = element_text(size = 13)
+  ) +
+  coord_cartesian(ylim = c(min(df$value) - 0.5, max(df$value) + 1.5))
+
+# Add significance brackets only if there are any significant comparisons
+if (nrow(dunn_sig) > 0) {
+  p <- p + stat_pvalue_manual(
+    dunn_sig,
+    label = "p.adj.signif",
+    y.position = seq(max(df$value) * 1.05, by = 0.5, length.out = nrow(dunn_sig)),
+    tip.length = 0.02,
+    size = 5,
+    bracket.size = 0.6
+  )
+}
+
+print(p)
+ggsave("RIG1_boxplot.png", p, width = 7, height = 6.5, dpi = 300)
