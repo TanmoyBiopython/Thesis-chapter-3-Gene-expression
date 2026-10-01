@@ -1,0 +1,116 @@
+install.packages("dunn.test")
+library(dunn.test)
+
+
+
+
+library(ggplot2)
+library(dunn.test)
+library(dplyr)
+
+# ---------- Data ----------
+gbs <- c(1.93, 0.87, 1.65, 1.97, 1.50, 4.22, 4.38, 2.66, 1.60, 0.91,
+         1.19, 4.16, 1.93, 0.67, 1.75, 2.46, 9.07, 4.02, 0.57, 1.94,
+         1.35, 2.07, 2.64)
+
+sle <- c(6.95, 2.82, 0.81, 3.95, 4.53, 9.37, 1.94, 4.08, 2.55, 3.65,
+         1.37, 4.90, 1.89, 15.33, 0.81, 2.43, 4.12, 5.78, 6.89, 2.69,
+         11.31, 4.54, 0.37)
+
+ms <- c(1.21, 14.16, 14.92, 17.14, 3.64, 3.61, 1.17, 3.66, 1.12, 24.34,
+        0.28, 3.24, 14.18, 8.86, 5.75, 5.22, 5.62, 6.92, 0.79, 35.76,
+        2.87, 4.77, 3.00)
+
+hc_ddct <- c(-1.81, -0.17, -0.74, 0.39, 0.58, 0.75, -1.09, 1.05, 0.75,
+             -1.40, 3.63, -0.91, 3.33, 2.75, -0.82, -1.31, -1.05, -1.69,
+             -1.78, -0.99, -0.98, -0.37, 1.89)
+hc <- -hc_ddct
+
+gbs_log2 <- log2(gbs)
+sle_log2 <- log2(sle)
+ms_log2  <- log2(ms)
+
+df <- data.frame(
+  value = c(gbs_log2, sle_log2, ms_log2, hc),
+  group = factor(rep(c("GBS", "SLE", "MS", "HC"), each = 23),
+                 levels = c("HC", "GBS", "SLE", "MS"))
+)
+
+# ---------- Kruskal-Wallis + Dunn ----------
+kt <- kruskal.test(value ~ group, data = df)
+print(kt)
+
+dunn <- dunn.test(df$value, df$group, method = "holm", kw = FALSE)
+dunn_df <- data.frame(
+  comparison = dunn$comparisons,
+  P_holm = dunn$P.adjusted
+)
+print(dunn_df)
+
+# ---------- Build significance brackets for significant pairs ----------
+sig <- dunn_df %>% filter(P_holm < 0.05)
+
+# positions for brackets
+y_max <- max(df$value, na.rm = TRUE)
+step  <- (y_max - min(df$value, na.rm = TRUE)) * 0.08
+sig <- sig %>%
+  mutate(
+    g1 = sub(" - .*", "", comparison),
+    g2 = sub(".* - ", "", comparison),
+    y  = y_max + step * seq_len(n())
+  )
+
+# ---------- Plot ----------
+p <- ggplot(df, aes(x = group, y = value, fill = group)) +
+  geom_boxplot(width = 0.55, outlier.shape = NA, alpha = 0.55, color = "grey20") +
+  geom_jitter(width = 0.12, size = 2, alpha = 0.8, shape = 21, color = "black") +
+  scale_fill_manual(values = c(HC = "#4C72B0", GBS = "#DD8452",
+                               SLE = "#55A868", MS = "#C44E52")) +
+  labs(
+    x = NULL,
+    y = expression(log[2]~"fold change"),
+    title = "Gene expression across groups",
+    subtitle = paste0("Kruskal-Wallis p = ",
+                      formatC(kt$p.value, format = "e", digits = 2),
+                      "; Dunn post-hoc, Holm-adjusted")
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black")
+  )
+
+# Add brackets for significant Dunn comparisons
+if (nrow(sig) > 0) {
+  p <- p +
+    geom_segment(data = sig,
+                 aes(x = as.numeric(factor(g1, levels = levels(df$group))) - 0.1,
+                     xend = as.numeric(factor(g2, levels = levels(df$group))) + 0.1,
+                     y = y, yend = y),
+                 inherit.aes = FALSE, color = "black") +
+    geom_segment(data = sig,
+                 aes(x = as.numeric(factor(g1, levels = levels(df$group))) - 0.1,
+                     xend = as.numeric(factor(g1, levels = levels(df$group))) - 0.1,
+                     y = y, yend = y - step * 0.2),
+                 inherit.aes = FALSE, color = "black") +
+    geom_segment(data = sig,
+                 aes(x = as.numeric(factor(g2, levels = levels(df$group))) + 0.1,
+                     xend = as.numeric(factor(g2, levels = levels(df$group))) + 0.1,
+                     y = y, yend = y - step * 0.2),
+                 inherit.aes = FALSE, color = "black") +
+    geom_text(data = sig,
+              aes(x = (as.numeric(factor(g1, levels = levels(df$group))) +
+                         as.numeric(factor(g2, levels = levels(df$group)))) / 2,
+                  y = y + step * 0.15,
+                  label = ifelse(P_holm < 0.001, "***",
+                                 ifelse(P_holm < 0.01, "**",
+                                        ifelse(P_holm < 0.05, "*", "ns")))),
+              inherit.aes = FALSE, size = 5) +
+    coord_cartesian(ylim = c(min(df$value) - step,
+                             max(sig$y) + step * 1.5))
+}
+
+print(p)
+
+ggsave("expression_boxplot.png", p, width = 7, height = 6, dpi = 300)
