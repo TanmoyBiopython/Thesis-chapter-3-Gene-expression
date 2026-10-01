@@ -1,0 +1,269 @@
+# =============================================================================
+# TLR4 gene expression analysis — GBS vs SLE vs MS vs HC
+# Reproducible statistical pipeline
+# Author: <your name>
+# Date:   <YYYY-MM-DD>
+# R version: >= 4.3
+# =============================================================================
+
+# ---- 0. Packages ------------------------------------------------------------
+# install.packages(c("ggplot2", "dplyr", "tidyr", "rstatix",
+#                    "ggpubr", "dunn.test", "effsize", "car"))
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(rstatix)
+library(ggpubr)
+library(dunn.test)
+library(effsize)
+
+set.seed(123)  # for reproducibility (permutation tests, jitter, etc.)
+
+# =============================================================================
+# 1. DATA ENTRY
+# =============================================================================
+# GBS: fold change = 2^-ddCt
+gbs <- c(0.65, 2.28, 5.40, 3.10, 0.58, 3.55, 2.37, 2.44, 1.18, 0.68,
+         0.82, 5.26, 6.16, 0.55, 1.77, 3.80, 9.38, 8.70, 0.46, 1.22,
+         0.44, 0.78, 12.71)
+
+# SLE: fold change = 2^-ddCt
+sle <- c(4.45, 5.24, 0.76, 3.44, 3.26, 4.63, 0.76, 3.76, 0.81, 0.17,
+         0.71, 5.11, 1.85, 17.12, 0.36, 1.53, 3.16, 5.16, 0.02, 1.51,
+         5.64, 7.09, 4.80)
+
+# MS: fold change = 2^-ddCt
+ms <- c(1.96, 16.18, 29.22, 12.82, 0.50, 1.24, 0.58, 0.47, 0.07, 49.16,
+        0.02, 4.54, 12.47, 13.72, 4.87, 4.39, 7.93, 4.68, 4.83, 57.37,
+        0.66, 5.89, 4.60)
+
+# HC: values are ddCt (relative to HC group mean)
+# Convert to log2FC via: log2FC = -ddCt
+hc_ddct <- c(-2.04, -0.43, -1.63, 1.07, -0.84, 0.06, -0.53, 3.85, 0.32,
+             10.41, 0.60, -3.31, 0.46, 2.21, -0.80, -1.93, -1.51, -2.72,
+             -1.29, -0.94, -1.81, -1.33, 2.12)
+
+# ---- Build long-format data frame on log2 scale ----------------------------
+df <- data.frame(
+  value = c(log2(gbs), log2(sle), log2(ms), -hc_ddct),
+  group = factor(rep(c("GBS", "SLE", "MS", "HC"), each = 23),
+                 levels = c("HC", "GBS", "SLE", "MS"))
+)
+
+stopifnot(nrow(df) == 92, all(table(df$group) == 23))
+
+# =============================================================================
+# 2. DESCRIPTIVE SUMMARY
+# =============================================================================
+
+# ---- 2a. Fold-change scale (as reported in the paper) ----------------------
+desc_fc <- function(x, label) {
+  data.frame(
+    Group       = label,
+    n           = length(x),
+    Mean_FC     = round(mean(x), 2),
+    Median_FC   = round(median(x), 2),
+    IQR_FC      = paste0(round(quantile(x, 0.25), 2), "–",
+                         round(quantile(x, 0.75), 2)),
+    Min         = round(min(x), 2),
+    Max         = round(max(x), 2),
+    SD          = round(sd(x), 2)
+  )
+}
+
+fc_table <- rbind(
+  desc_fc(gbs, "GBS"),
+  desc_fc(sle, "SLE"),
+  desc_fc(ms,  "MS"),
+  desc_fc(2^(-hc_ddct), "HC (2^log2FC)")
+)
+
+cat("\n===== Descriptive summary — TLR4 fold change =====\n")
+print(fc_table, row.names = FALSE)
+
+# ---- 2b. log2 scale (analysis scale) ---------------------------------------
+cat("\n===== Descriptive summary — log2 scale =====\n")
+log2_table <- df %>%
+  group_by(group) %>%
+  summarise(
+    n              = n(),
+    Median_log2FC  = round(median(value), 2),
+    IQR_log2FC     = paste0(round(quantile(value, 0.25), 2), " to ",
+                            round(quantile(value, 0.75), 2)),
+    Mean_log2FC    = round(mean(value), 2),
+    SD_log2FC      = round(sd(value), 2),
+    .groups = "drop"
+  )
+print(log2_table, row.names = FALSE)
+
+# =============================================================================
+# 3. ASSUMPTION CHECKS
+# =============================================================================
+
+# ---- 3a. Shapiro-Wilk normality (per group, log2 scale) --------------------
+cat("\n===== Shapiro-Wilk normality (log2 scale) =====\n")
+shapiro_tbl <- df %>%
+  group_by(group) %>%
+  summarise(
+    W = round(shapiro.test(value)$statistic, 3),
+    p = round(shapiro.test(value)$p.value, 4),
+    .groups = "drop"
+  )
+print(shapiro_tbl, row.names = FALSE)
+
+# ---- 3b. Levene test for homogeneity of variance ---------------------------
+cat("\n===== Levene test (log2 scale) =====\n")
+levene_res <- car::leveneTest(value ~ group, data = df)
+print(levene_res)
+
+# =============================================================================
+# 4. OMNIBUS TEST — Kruskal-Wallis
+# =============================================================================
+kw <- kruskal.test(value ~ group, data = df)
+
+cat("\n===== Kruskal-Wallis (4 groups) =====\n")
+cat("Chi-squared =", round(kw$statistic, 3), "\n")
+cat("df          =", kw$parameter, "\n")
+cat("p-value     =", format.pval(kw$p.value, digits = 4), "\n")
+
+# Effect size: epsilon-squared = H / ((n^2 - 1) / (n + 1))
+n_total <- nrow(df)
+eps2 <- as.numeric(kw$statistic) * (n_total + 1) / (n_total^2 - 1)
+cat("Epsilon-squared =", round(eps2, 3), "\n")
+
+# =============================================================================
+# 5. POST-HOC — Dunn test with Holm adjustment
+# =============================================================================
+dunn_res <- dunn_test(df, value ~ group, p.adjust.method = "holm")
+
+cat("\n===== Dunn post-hoc (Holm) =====\n")
+print(dunn_res)
+
+# Alternative: classic dunn.test (same result)
+cat("\n===== dunn.test (Holm) — comparison output =====\n")
+dunn.test(df$value, df$group, method = "holm", kw = FALSE)
+
+# =============================================================================
+# 6. PAIRWISE EXACT MANN-WHITNEY U (independent check)
+# =============================================================================
+
+mwu_pair <- function(x, y, label) {
+  res_exact <- suppressWarnings(wilcox.test(x, y, exact = TRUE))
+  res_asy   <- wilcox.test(x, y, exact = FALSE, correct = TRUE)
+
+  U <- as.numeric(res_exact$statistic)
+  r_rb <- 1 - (2 * U) / (length(x) * length(y))  # rank-biserial correlation
+
+  data.frame(
+    Comparison   = label,
+    n1           = length(x),
+    n2           = length(y),
+    U            = U,
+    p_exact      = res_exact$p.value,
+    p_asymptotic = res_asy$p.value,
+    r_rank_biserial = round(r_rb, 3)
+  )
+}
+
+g <- df$value[df$group == "GBS"]
+s <- df$value[df$group == "SLE"]
+m <- df$value[df$group == "MS"]
+h <- df$value[df$group == "HC"]
+
+mwu_res <- rbind(
+  mwu_pair(g, s, "GBS vs SLE"),
+  mwu_pair(g, m, "GBS vs MS"),
+  mwu_pair(g, h, "GBS vs HC"),
+  mwu_pair(s, m, "SLE vs MS"),
+  mwu_pair(s, h, "SLE vs HC"),
+  mwu_pair(m, h, "MS vs HC")
+)
+
+mwu_res$p_holm <- p.adjust(mwu_res$p_exact, method = "holm")
+mwu_res$p_exact      <- format.pval(mwu_res$p_exact,      digits = 4)
+mwu_res$p_asymptotic <- format.pval(mwu_res$p_asymptotic, digits = 4)
+mwu_res$p_holm       <- format.pval(mwu_res$p_holm,       digits = 4)
+
+cat("\n===== Exact Mann-Whitney U (pairwise, unadjusted) =====\n")
+print(mwu_res, row.names = FALSE)
+
+# =============================================================================
+# 7. PLOT
+# =============================================================================
+
+# ---- 7a. Only Holm-significant pairs get brackets --------------------------
+dunn_sig <- dunn_res %>% filter(p.adj < 0.05)
+
+ymax <- max(df$value)
+ymin <- min(df$value)
+step <- (ymax - ymin) * 0.10
+
+if (nrow(dunn_sig) > 0) {
+  dunn_sig <- dunn_sig %>%
+    mutate(y.position = ymax + step * seq_len(n()))
+}
+
+p <- ggplot(df, aes(x = group, y = value, fill = group)) +
+  geom_boxplot(width = 0.55, outlier.shape = NA, alpha = 0.6,
+               color = "grey20", linewidth = 0.5) +
+  geom_jitter(width = 0.15, size = 2.5, alpha = 0.85,
+              shape = 21, color = "black", stroke = 0.4) +
+  scale_fill_manual(values = c(HC  = "#4C72B0",
+                               GBS = "#DD8452",
+                               SLE = "#55A868",
+                               MS  = "#C44E52")) +
+  labs(
+    x = NULL,
+    y = expression(bold(log[2]~"fold change of TLR4")),
+    title = "TLR4 expression across study groups",
+    subtitle = paste0("Kruskal-Wallis p = ",
+                      format.pval(kw$p.value, digits = 3),
+                      "  |  Dunn post-hoc, Holm-adjusted")
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title    = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(color = "grey30", size = 11),
+    axis.text     = element_text(color = "black", size = 12),
+    axis.title    = element_text(size = 13)
+  )
+
+if (nrow(dunn_sig) > 0) {
+  p <- p +
+    stat_pvalue_manual(
+      dunn_sig,
+      label        = "p.adj.signif",
+      y.position   = "y.position",
+      tip.length   = 0.02,
+      size         = 5,
+      bracket.size = 0.6
+    ) +
+    coord_cartesian(ylim = c(ymin - 0.3, max(dunn_sig$y.position) + step))
+} else {
+  p <- p + coord_cartesian(ylim = c(ymin - 0.3, ymax + step))
+}
+
+print(p)
+ggsave("TLR4_boxplot.png", p, width = 7, height = 6.5, dpi = 300)
+ggsave("TLR4_boxplot.pdf", p, width = 7, height = 6.5)
+
+# =============================================================================
+# 8. EXPORT RESULTS
+# =============================================================================
+write.csv(fc_table,   "TLR4_descriptive_FC.csv",   row.names = FALSE)
+write.csv(log2_table, "TLR4_descriptive_log2.csv", row.names = FALSE)
+write.csv(dunn_res,   "TLR4_dunn_holm.csv",        row.names = FALSE)
+write.csv(mwu_res,    "TLR4_mannwhitney.csv",      row.names = FALSE)
+
+cat("\nDone. Files written to working directory:\n")
+cat("  TLR4_boxplot.png\n  TLR4_boxplot.pdf\n")
+cat("  TLR4_descriptive_FC.csv\n  TLR4_descriptive_log2.csv\n")
+cat("  TLR4_dunn_holm.csv\n  TLR4_mannwhitney.csv\n")
+
+# =============================================================================
+# 9. SESSION INFO (for reproducibility)
+# =============================================================================
+cat("\n===== Session info =====\n")
+print(sessionInfo())
