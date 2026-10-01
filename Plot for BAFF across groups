@@ -1,0 +1,109 @@
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+
+# Fold-change data
+gbs <- c(1.46, 0.70, 1.31, 0.30, 0.41, 2.42, 3.38, 1.74, 2.67, 0.23,
+         1.14, 2.74, 0.84, 0.77, 0.51, 0.35, 0.70, 0.85, 0.09, 4.11,
+         2.78, 2.59, 1.08)
+
+sle <- c(6.78, 2.10, 0.39, 4.84, 1.82, 1.11, 0.28, 1.28, 1.40, 2.63,
+         1.96, 3.56, 1.78, 3.30, 2.01, 1.04, 4.60, 4.99, 6.97, 2.16,
+         1.50, 2.13, 1.18)
+
+ms <- c(0.31, 0.82, 1.08, 1.43, 1.58, 1.13, 1.91, 0.82, 1.50, 3.75,
+        0.17, 2.31, 2.33, 0.80, 2.09, 0.72, 2.64, 1.19, 0.39, 2.56,
+        1.02, 0.50, 0.70)
+
+# HC measurements are ΔΔCt, so use -ΔΔCt for log2 fold change.
+hc_ddct <- c(-0.43, 1.82, 0.38, 0.57, -0.73, -1.14, -0.83, 0.76, 1.97,
+             -0.99, 1.87, -1.80, 0.89, 0.15, 0.32, 0.20, -0.53, -2.39,
+             -1.71, -0.30, 0.10, 0.05, 1.78)
+
+df <- data.frame(
+  value = c(-hc_ddct, log2(gbs), log2(sle), log2(ms)),
+  group = factor(
+    c(
+      rep("HC", length(hc_ddct)),
+      rep("GBS", length(gbs)),
+      rep("SLE", length(sle)),
+      rep("MS", length(ms))
+    ),
+    levels = c("HC", "GBS", "SLE", "MS")
+  )
+)
+
+# Holm-adjusted Dunn comparisons supplied in your table.
+sig_pairs <- data.frame(
+  group1 = c("HC", "GBS", "SLE"),
+  group2 = c("SLE", "SLE", "MS"),
+  p.adj = c(0.0036, 0.023, 0.042),
+  label = c("p = 0.0036", "p = 0.023", "p = 0.042")
+)
+
+# Place comparison brackets above the data.
+ymax <- max(df$value, na.rm = TRUE)
+ymin <- min(df$value, na.rm = TRUE)
+step <- (ymax - ymin) * 0.13
+
+sig_pairs$y.position <- ymax + step * c(1, 2, 3)
+
+p <- ggplot(df, aes(x = group, y = value, fill = group)) +
+  geom_boxplot(
+    width = 0.55,
+    outlier.shape = NA,
+    alpha = 0.6,
+    color = "grey20",
+    linewidth = 0.5
+  ) +
+  geom_jitter(
+    width = 0.15,
+    size = 2.5,
+    alpha = 0.85,
+    shape = 21,
+    color = "black",
+    stroke = 0.4
+  ) +
+  scale_fill_manual(values = c(
+    HC = "#4C72B0",
+    GBS = "#DD8452",
+    SLE = "#55A868",
+    MS = "#C44E52"
+  )) +
+  stat_pvalue_manual(
+    sig_pairs,
+    label = "label",
+    xmin = "group1",
+    xmax = "group2",
+    y.position = "y.position",
+    tip.length = 0.02,
+    size = 4,
+    bracket.size = 0.6
+  ) +
+  coord_cartesian(
+    ylim = c(ymin - 0.3, max(sig_pairs$y.position) + step * 0.6)
+  ) +
+  labs(
+    x = NULL,
+    y = expression(bold(log[2] ~ "fold change of BAFF")),
+    title = "BAFF expression across study groups",
+    subtitle = "Dunn post-hoc, Holm-adjusted"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(color = "grey30", size = 11),
+    axis.text = element_text(color = "black", size = 12),
+    axis.title = element_text(size = 13)
+  )
+
+print(p)
+
+ggsave(
+  filename = "BAFF_boxplot.png",
+  plot = p,
+  width = 7,
+  height = 6.5,
+  dpi = 300
+)
