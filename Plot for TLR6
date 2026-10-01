@@ -1,0 +1,91 @@
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+
+# ============================================================
+# Data Preparation (TLR6)
+# ============================================================
+gbs <- c(1.43, 0.32, 1.69, 19.36, 0.19, 0.35, 2.02, 2.15, 97.46, 0.19,
+         0.34, 0.79, 34.63, 7.15, 1.02, 2.98, 2.39, 4.67, 0.35, 1.32,
+         0.50, 0.58, 2.00)
+
+sle <- c(2.82, 1.24, 0.20, 1.16, 2.38, 5.55, 0.57, 0.76, 0.56, 2.98,
+         1.39, 3.39, 0.80, 2.87, 2.06, 0.55, 6.77, 1.72, 5.76, 2.08,
+         9.58, 2.79, 41.32)
+
+ms <- c(1.73, 10.38, 10.93, 9.74, 1.97, 2.46, 0.18, 1.69, 1.48, 9.79,
+        3.80, 1.65, 5.36, 2.32, 2.37, 0.51, 9.03, 5.32, 0.36, 11.57,
+        1.03, 2.25, 3.98)
+
+hc_ddct <- c(-0.51, 1.69, 0.04, 0.75, 2.47, 2.35, -0.52, 0.78, -0.47,
+             3.62, -2.19, -6.21, -1.92, -4.75, 0.21, -0.23, -0.67, -0.85,
+             0.80, 0.81, 0.69, 0.75, 3.36)
+
+# Create dataframe on log2 scale (HC: log2FC = -ddCt)
+df <- data.frame(
+  value = c(log2(gbs), log2(sle), log2(ms), -hc_ddct),
+  group = factor(rep(c("GBS", "SLE", "MS", "HC"), each = 23),
+                 levels = c("HC", "GBS", "SLE", "MS"))
+)
+
+# ============================================================
+# Plotting
+# ============================================================
+
+# Define significant Dunn post-hoc results (Holm-adjusted)
+# Format: group1, group2, p-value, y-position for bracket
+stat_dat <- data.frame(
+  group1 = c("GBS", "GBS", "HC", "HC"),
+  group2 = c("SLE", "MS", "SLE", "MS"),
+  p.adj = c(0.044, 0.027, 0.0082, 0.0038),
+  y.position = c(7.5, 8.2, 8.9, 9.6) # Stacked brackets
+)
+
+# Add significance stars
+stat_dat$p.adj.signif <- ifelse(stat_dat$p.adj < 0.001, "***",
+                         ifelse(stat_dat$p.adj < 0.01, "**",
+                         ifelse(stat_dat$p.adj < 0.05, "*", "ns")))
+
+# Create the plot
+p <- ggplot(df, aes(x = group, y = value, fill = group)) +
+  # Boxplot
+  geom_boxplot(width = 0.55, outlier.shape = NA, alpha = 0.6, color = "grey20", linewidth = 0.5) +
+  # Jittered points
+  geom_jitter(width = 0.15, size = 2.5, alpha = 0.85, shape = 21, color = "black", stroke = 0.4) +
+  # Colors
+  scale_fill_manual(values = c(HC = "#4C72B0", GBS = "#DD8452", 
+                               SLE = "#55A868", MS = "#C44E52")) +
+  # Labels
+  labs(
+    x = NULL,
+    y = expression(bold(log[2]~"fold change of TLR6")),
+    title = "TLR6 expression across study groups",
+    subtitle = paste0("Kruskal-Wallis p = 0.0039  |  Dunn post-hoc, Holm-adjusted")
+  ) +
+  # Theme
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(color = "grey30", size = 11),
+    axis.text = element_text(color = "black", size = 12),
+    axis.title = element_text(size = 13)
+  ) +
+  # Add significance brackets
+  stat_pvalue_manual(
+    stat_dat,
+    label = "p.adj.signif",
+    y.position = "y.position",
+    tip.length = 0.02,
+    size = 5,
+    bracket.size = 0.6
+  ) +
+  # Expand y-axis to fit brackets
+  coord_cartesian(ylim = c(-7, 11))
+
+# Display the plot
+print(p)
+
+# Save the plot
+ggsave("TLR6_boxplot.png", p, width = 7, height = 6.5, dpi = 300)
