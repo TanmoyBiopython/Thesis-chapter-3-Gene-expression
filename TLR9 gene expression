@@ -1,0 +1,92 @@
+# ------------------------------------------------------------------
+# TLR9 relative expression (2^-ddCt) in HC, GBS, MS and SLE
+# Dot plot on a log2 fold-change axis: individual samples, median + IQR,
+# Kruskal-Wallis p-value and Dunn-Holm post-hoc table.
+# Each sample's TLR9 ddCt value is embedded below.
+# Requires: ggplot2 (install.packages("ggplot2"))
+# ------------------------------------------------------------------
+
+library(ggplot2)
+
+# ---- 1. Data: one row per sample -------------------------------
+# ddCt = TLR9 delta-delta Ct; fc = 2^(-ddCt)
+
+d <- data.frame(
+  group = c(
+    rep("HC", 23), rep("GBS", 23), rep("MS", 23), rep("SLE", 23)
+  ),
+  sample = c(
+    "HC-08","HC-9","HC-10","HC-13","HC-14","HC-15","HC-16","HC-19","HC-20","HC-21","HC-22","HC-23","HC-24","HC-25","HC-28","HC-29","HC-30","HC-31","HC-32","HC-33","HC-34","HC-35","HC-36",
+    "GBS-2","GBS-03","GBS-05","GBS-06","GBS-07","GBS-08","GBS-10","GBS-13","GBS-14","GBS-15R","GBS-16","GBS-17","GBS-18","GBS-19","GBS-20","GBS-21","GBS-22","GBS-23","GBS-24","GBS-25","GBS-26","GBS-27","GBS-28",
+    "MS-1","MS-02","MS-04","MS-05","MS-06","MS-7","MS-08","MS-09","MS-10","MS-11","MS-12","MS-13","MS-14","MS-15","MS-16","MS-18","MS-19","MS-20","MS-21","MS-22","MS-23","MS-24","MS-25",
+    "SLE-02","SLE-03","SLE-04","SLE-05","SLE-06","SLE-07","SLE-08","SLE-09","SLE-10","SLE-11","SLE-12","SLE-13","SLE-15","SLE-16","SLE-17","SLE-19","SLE-21","SLE-22","SLE-23","SLE-24","SLE-25","SLE-26","SLE-27"
+  ),
+  ddCt = c(
+    -2.02963913043478, 0.463160869565215, -0.305639130434782, 0.340560869565218, 1.07866086956522, -2.03223913043478, -0.414439130434785, 0.786360869565216, -0.806539130434782, 8.88806086956521, -0.612739130434784, -3.57893913043478, -1.19303913043478, 0.228360869565217, -0.110739130434784, -0.863839130434785, 0.322060869565217, -0.338039130434783, -0.0904391304347847, -0.370639130434784, -1.76683913043478, 2.17456086956522, 0.231960869565219,
+    1.23686086956522, 1.10446086956522, 0.155860869565215, -4.19603913043479, -0.943539130434784, -0.775939130434782, 0.894960869565217, -0.216339130434781, -3.56863913043478, -1.28963913043478, 0.772160869565218, -1.20313913043478, -2.49043913043479, -0.000739130434782354, 1.34736086956522, -1.40473913043479, -1.69623913043479, -2.32363913043478, 0.622760869565218, -0.464739130434783, 0.0890608695652162, -2.56273913043479, -2.55753913043478,
+    -4.27033913043478, -2.50663913043478, -0.377639130434783, -1.26293913043478, 0.311460869565215, 1.27346086956522, 1.29976086956522, -2.01813913043478, -0.286839130434783, -0.906839130434783, -0.132039130434785, -1.32963913043478, -1.60493913043478, -1.88863913043478, -1.05843913043478, -1.22323913043478, -1.26913913043478, -1.55033913043478, 0.222460869565218, -1.38983913043478, -1.07793913043478, -1.07993913043478, 0.00916086956521767,
+    -0.053139130434781, -0.307339130434784, -0.512739130434783, -0.00703913043478188, -0.507839130434784, -0.909239130434784, 1.32556086956522, 0.926760869565218, 1.07396086956522, 0.301360869565215, -4.01733913043478, 0.190760869565217, 0.207360869565218, -1.30333913043478, -1.37193913043478, -0.898039130434784, -1.84993913043478, -1.81573913043478, 0.924760869565215, 0.590560869565218, -0.413839130434782, -0.309439130434782, -4.14933913043478
+  ),
+  stringsAsFactors = FALSE
+)
+
+d$fc <- 2^(-d$ddCt)
+group_order <- c("HC", "GBS", "MS", "SLE")
+d$group <- factor(d$group, levels = group_order)
+
+# Fixed jitter for a reproducible figure
+jitter_values <- c(0.045034,0.142997,0.099247,-0.098925,-0.071940,0.134479,-0.178104,0.115642,0.106945,-0.011543,-0.070908,-0.079767,-0.088247,-0.019773,0.001637,0.019259,0.178380,0.105358,0.043985,0.176026,-0.102489,-0.122324,0.040514)
+d$jitter <- rep(jitter_values, times = 4)
+d$x <- as.numeric(d$group) + d$jitter
+d$log2fc <- log2(d$fc)
+
+# ---- 2. Statistics ------------------------------------------------
+kw <- kruskal.test(fc ~ group, data = d)
+kw_p <- kw$p.value
+print(kw)
+
+dunn_holm <- function(x, g) {
+  g <- factor(g); N <- length(x); r <- rank(x)
+  mr <- sapply(split(r, g), mean); n <- sapply(split(r, g), length)
+  tt <- table(x); tie <- 1 - sum(tt^3 - tt) / (N^3 - N)
+  pr <- combn(levels(g), 2)
+  res <- data.frame(a = pr[1, ], b = pr[2, ], stringsAsFactors = FALSE)
+  res$z <- (mr[res$a] - mr[res$b]) / sqrt(N * (N + 1) / 12 * tie * (1 / n[res$a] + 1 / n[res$b]))
+  res$p <- 2 * pnorm(-abs(res$z))
+  res$p_holm <- p.adjust(res$p, method = "holm")
+  res
+}
+
+dunn <- dunn_holm(d$fc, d$group)
+print(dunn)
+fmt_p <- function(p) if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)
+
+summ <- do.call(rbind, lapply(group_order, function(g) {
+  y <- d$log2fc[d$group == g]; q <- quantile(y, c(0.25, 0.5, 0.75))
+  data.frame(group = g, xpos = match(g, group_order), q1 = q[[1]], med = q[[2]], q3 = q[[3]], n = length(y))
+}))
+
+# ---- 3. Plot ------------------------------------------------------
+cols <- c(HC = "#2CA02C", GBS = "#1F77B4", MS = "#FF7F0E", SLE = "#D62728")
+ticks <- seq(-6, 6, by = 2)
+
+p <- ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_point(data = d, aes(x = x, y = log2fc, colour = group), size = 1.9, alpha = 0.85) +
+  geom_segment(data = summ, aes(x = xpos, xend = xpos, y = q1, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q1, yend = q1), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q3, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.30, xend = xpos + 0.30, y = med, yend = med), linewidth = 0.8) +
+  annotate("text", x = 0.5, y = 7.35, hjust = 0, vjust = 1, size = 2.8, lineheight = 0.95, label = paste0("Kruskal–Wallis\n", fmt_p(kw_p))) +
+  scale_colour_manual(values = cols, guide = "none") +
+  scale_x_continuous(breaks = 1:4, limits = c(0.4, 4.6), labels = paste0(group_order, "\n(n = ", summ$n, ")"), expand = c(0, 0)) +
+  scale_y_continuous(name = expression("TLR9 relative expression (log"[2]*" fold change)"), breaks = ticks, limits = c(-6.6, 7.4), expand = c(0, 0), sec.axis = sec_axis(~ ., name = "Fold change", breaks = ticks, labels = c("1/64", "1/16", "1/4", "1", "4", "16", "64"))) +
+  labs(x = NULL) +
+  theme_classic(base_size = 9, base_family = "sans") +
+  theme(axis.text = element_text(colour = "black"), axis.line = element_line(linewidth = 0.4), axis.ticks = element_line(linewidth = 0.4), axis.line.x.top = element_blank())
+
+print(p)
+
+ggsave("tlr9_fold_change_figure.pdf", p, width = 4.2, height = 4.0, device = cairo_pdf)
+ggsave("tlr9_fold_change_figure.png", p, width = 4.2, height = 4.0, dpi = 600)
+ggsave("tlr9_fold_change_figure.tiff", p, width = 4.2, height = 4.0, dpi = 600, compression = "lzw")
