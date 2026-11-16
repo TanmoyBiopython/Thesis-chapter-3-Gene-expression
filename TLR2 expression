@@ -1,0 +1,207 @@
+# ------------------------------------------------------------------
+# TLR2 relative expression (2^-ddCt) in HC, GBS, MS and SLE
+# Dot plot on a log2 fold-change axis: individual samples, median + IQR,
+# Kruskal-Wallis p-value and Dunn (Holm) significance brackets.
+# Reproduces tlr2_fold_change_figure.*
+# Requires: ggplot2 (install.packages("ggplot2"))
+# ------------------------------------------------------------------
+library(ggplot2)
+
+# ---- 1. Data: one row per sample ---------------------------------
+# fc     = TLR2 fold change, 2^-ddCt (B2M-normalised, calibrated to HC mean)
+# jitter = fixed horizontal offset for each dot (identical figure every run)
+d <- data.frame(matrix(c(
+  "HC", "HC-08", 3.505260681, 0.045034,
+  "HC", "HC-9", 1.124140015, 0.142997,
+  "HC", "HC-10", 1.669159405, 0.099247,
+  "HC", "HC-13", 0.7652068741, -0.098925,
+  "HC", "HC-14", 0.6682786731, -0.071940,
+  "HC", "HC-15", 0.5963460862, 0.134479,
+  "HC", "HC-16", 2.128182303, -0.178104,
+  "HC", "HC-19", 0.4821392341, 0.115642,
+  "HC", "HC-20", 0.5962220924, 0.106945,
+  "HC", "HC-21", 2.643999198, -0.011543,
+  "HC", "HC-22", 0.08104807549, -0.070908,
+  "HC", "HC-23", 1.880767793, -0.079767,
+  "HC", "HC-24", 0.09972656986, -0.088247,
+  "HC", "HC-25", 0.1487665149, -0.019773,
+  "HC", "HC-28", 1.762986881, 0.001637,
+  "HC", "HC-29", 2.481687981, 0.019259,
+  "HC", "HC-30", 2.064971312, 0.178380,
+  "HC", "HC-31", 3.229524442, 0.105358,
+  "HC", "HC-32", 3.423380704, 0.043985,
+  "HC", "HC-33", 1.99117737, 0.176026,
+  "HC", "HC-34", 1.965807071, -0.102489,
+  "HC", "HC-35", 1.288704721, -0.122324,
+  "HC", "HC-36", 0.2705039824, 0.040514,
+  "GBS", "GBS-2", 1.926819913, -0.164181,
+  "GBS", "GBS-03", 0.870081072, -0.167155,
+  "GBS", "GBS-05", 1.653498503, 0.005360,
+  "GBS", "GBS-06", 1.969080017, -0.012166,
+  "GBS", "GBS-07", 1.500581564, 0.150180,
+  "GBS", "GBS-08", 4.219060394, 0.046521,
+  "GBS", "GBS-10", 4.376937366, 0.005082,
+  "GBS", "GBS-13", 2.657964322, -0.001126,
+  "GBS", "GBS-14", 1.602274954, -0.090895,
+  "GBS", "GBS-15R", 0.9056476296, -0.175754,
+  "GBS", "GBS-16", 1.191865748, -0.110735,
+  "GBS", "GBS-17", 4.158092173, 0.069132,
+  "GBS", "GBS-18", 1.928690619, -0.107782,
+  "GBS", "GBS-19", 0.6717618352, -0.046967,
+  "GBS", "GBS-20", 1.752387391, -0.178656,
+  "GBS", "GBS-21", 2.46454571, 0.118817,
+  "GBS", "GBS-22", 9.068234753, -0.124394,
+  "GBS", "GBS-23", 4.023976108, -0.083664,
+  "GBS", "GBS-24", 0.5669218344, 0.136920,
+  "GBS", "GBS-25", 1.941971111, 0.003525,
+  "GBS", "GBS-26", 1.353431376, 0.124974,
+  "GBS", "GBS-27", 2.072858647, 0.050298,
+  "GBS", "GBS-28", 2.642899818, 0.087038,
+  "MS", "MS-1", 1.210096197, -0.147062,
+  "MS", "MS-02", 14.16463714, 0.014812,
+  "MS", "MS-04", 14.91634059, 0.002798,
+  "MS", "MS-05", 17.13675139, 0.133682,
+  "MS", "MS-06", 3.638444336, -0.049945,
+  "MS", "MS-7", 3.608306121, 0.035346,
+  "MS", "MS-08", 1.167580272, -0.158669,
+  "MS", "MS-09", 3.657154914, -0.040453,
+  "MS", "MS-10", 1.124062099, -0.063707,
+  "MS", "MS-11", 24.33940068, -0.125928,
+  "MS", "MS-12", 0.2838935032, 0.113882,
+  "MS", "MS-13", 3.240287309, -0.043399,
+  "MS", "MS-14", 14.18232089, 0.172349,
+  "MS", "MS-15", 8.858864183, 0.032397,
+  "MS", "MS-16", 5.751035484, 0.037820,
+  "MS", "MS-18", 5.219898446, 0.049679,
+  "MS", "MS-19", 5.622149195, 0.063522,
+  "MS", "MS-20", 6.922157364, -0.125716,
+  "MS", "MS-21", 0.7899436996, -0.021487,
+  "MS", "MS-22", 35.76364158, -0.093757,
+  "MS", "MS-23", 2.867953711, -0.035101,
+  "MS", "MS-24", 4.765150364, -0.145187,
+  "MS", "MS-25", 3.003660465, 0.168418,
+  "SLE", "SLE-02", 6.946189353, -0.102599,
+  "SLE", "SLE-03", 2.819465597, 0.061835,
+  "SLE", "SLE-04", 0.8097349978, -0.071849,
+  "SLE", "SLE-05", 3.94991536, 0.134668,
+  "SLE", "SLE-06", 4.525953427, 0.058397,
+  "SLE", "SLE-07", 9.365926648, -0.132618,
+  "SLE", "SLE-08", 1.941163636, 0.124227,
+  "SLE", "SLE-09", 4.079300366, 0.160181,
+  "SLE", "SLE-10", 2.550573612, 0.145410,
+  "SLE", "SLE-11", 3.646270871, 0.025099,
+  "SLE", "SLE-12", 1.37146874, -0.127634,
+  "SLE", "SLE-13", 4.896401082, -0.110713,
+  "SLE", "SLE-15", 1.893455794, 0.154046,
+  "SLE", "SLE-16", 15.32719445, 0.018838,
+  "SLE", "SLE-17", 0.8057039531, -0.115001,
+  "SLE", "SLE-19", 2.432806775, 0.138260,
+  "SLE", "SLE-21", 4.120506649, 0.050966,
+  "SLE", "SLE-22", 5.78181216, 0.025090,
+  "SLE", "SLE-23", 6.88721989, -0.044536,
+  "SLE", "SLE-24", 2.687047341, -0.032056,
+  "SLE", "SLE-25", 11.31387898, -0.093784,
+  "SLE", "SLE-26", 4.538834044, -0.166299,
+  "SLE", "SLE-27", 0.3723217338, 0.135439
+), ncol = 4, byrow = TRUE), stringsAsFactors = FALSE)
+names(d) <- c("group", "sample", "fc", "jitter")
+d$fc     <- as.numeric(d$fc)
+d$jitter <- as.numeric(d$jitter)
+
+group_order <- c("HC", "GBS", "MS", "SLE")
+d$group  <- factor(d$group, levels = group_order)
+d$x      <- as.numeric(d$group) + d$jitter
+d$log2fc <- log2(d$fc)
+
+# ---- 2. Statistics ------------------------------------------------
+kw   <- kruskal.test(fc ~ group, data = d)
+kw_p <- kw$p.value                    # H = 24.30, df = 3, p = 2.16e-05
+print(kw)
+
+# Dunn's test with tie correction and Holm adjustment (base R only)
+dunn_holm <- function(x, g) {
+  g  <- factor(g)
+  N  <- length(x)
+  r  <- rank(x)
+  mr <- sapply(split(r, g), mean)
+  n  <- sapply(split(r, g), length)
+  tt  <- table(x)
+  tie <- 1 - sum(tt^3 - tt) / (N^3 - N)
+  pr  <- combn(levels(g), 2)
+  res <- data.frame(a = pr[1, ], b = pr[2, ], stringsAsFactors = FALSE)
+  res$z <- (mr[res$a] - mr[res$b]) /
+    sqrt(N * (N + 1) / 12 * tie * (1 / n[res$a] + 1 / n[res$b]))
+  res$p      <- 2 * pnorm(-abs(res$z))
+  res$p_holm <- p.adjust(res$p, method = "holm")
+  res
+}
+dunn <- dunn_holm(d$fc, d$group)
+print(dunn)   # MS vs HC 7.0e-05, SLE vs HC 0.0011, MS vs GBS 0.0166 (Holm)
+
+# brackets for every Holm-significant pair (shortest span lowest)
+stars  <- function(p) if (p < 0.001) "***" else if (p < 0.01) "**" else "*"
+fmt_p  <- function(p) if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)
+sig <- dunn[dunn$p_holm < 0.05, ]
+sig$x1   <- match(sig$a, group_order)
+sig$x2   <- match(sig$b, group_order)
+sig$xmin <- pmin(sig$x1, sig$x2)
+sig$xmax <- pmax(sig$x1, sig$x2)
+sig <- sig[order(sig$xmax - sig$xmin, sig$xmin), ]
+base_y <- 5.9; step_y <- 0.85
+sig$y     <- base_y + (seq_len(nrow(sig)) - 1) * step_y
+sig$label <- paste(sapply(sig$p_holm, stars), sapply(sig$p_holm, fmt_p))
+
+# median and IQR on the log2 scale (R default quantile type 7)
+summ <- do.call(rbind, lapply(group_order, function(g) {
+  y <- d$log2fc[d$group == g]
+  q <- quantile(y, c(0.25, 0.5, 0.75))
+  data.frame(group = g, xpos = match(g, group_order),
+             q1 = q[[1]], med = q[[2]], q3 = q[[3]], n = length(y))
+}))
+
+cols <- c(HC = "#2CA02C", GBS = "#1F77B4", MS = "#FF7F0E", SLE = "#D62728")
+
+# ---- 3. Plot ------------------------------------------------------
+ticks <- seq(-4, 8, by = 2)
+
+p <- ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_point(data = d, aes(x = x, y = log2fc, colour = group), size = 1.9, alpha = 0.85) +
+  # IQR whiskers with caps, then median line
+  geom_segment(data = summ, aes(x = xpos, xend = xpos, y = q1, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q1, yend = q1), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q3, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.30, xend = xpos + 0.30, y = med, yend = med), linewidth = 0.8) +
+  # significance brackets (Dunn, Holm-adjusted)
+  geom_segment(data = sig, aes(x = xmin, xend = xmax, y = y, yend = y), linewidth = 0.4) +
+  geom_segment(data = sig, aes(x = xmin, xend = xmin, y = y - 0.12, yend = y), linewidth = 0.4) +
+  geom_segment(data = sig, aes(x = xmax, xend = xmax, y = y - 0.12, yend = y), linewidth = 0.4) +
+  geom_text(data = sig, aes(x = (xmin + xmax) / 2, y = y + 0.08, label = label),
+            vjust = 0, size = 2.8) +
+  # Kruskal-Wallis label
+  annotate("text", x = 0.5, y = 9.5, hjust = 0, vjust = 1, size = 2.8, lineheight = 0.95,
+           label = paste0("Kruskal\u2013Wallis\n", fmt_p(kw_p))) +
+  scale_colour_manual(values = cols, guide = "none") +
+  scale_x_continuous(breaks = 1:4, limits = c(0.4, 4.6),
+                     labels = paste0(group_order, "\n(n = ", summ$n, ")"),
+                     expand = c(0, 0)) +
+  scale_y_continuous(
+    name   = expression("TLR2 relative expression (log"[2]*" fold change)"),
+    breaks = ticks, limits = c(-4.2, 9.6), expand = c(0, 0),
+    sec.axis = sec_axis(~ ., name = "Fold change", breaks = ticks,
+                        labels = c("1/16", "1/4", "1", "4", "16", "64", "256"))
+  ) +
+  labs(x = NULL) +
+  theme_classic(base_size = 9, base_family = "sans") +
+  theme(axis.text  = element_text(colour = "black"),
+        axis.line  = element_line(linewidth = 0.4),
+        axis.ticks = element_line(linewidth = 0.4),
+        axis.line.x.top = element_blank())
+
+print(p)
+
+# ---- 4. Export (4.2 x 4.0 in) -------------------------------------
+ggsave("tlr2_fold_change_figure.pdf",  p, width = 4.2, height = 4.0, device = cairo_pdf)
+ggsave("tlr2_fold_change_figure.png",  p, width = 4.2, height = 4.0, dpi = 600)
+ggsave("tlr2_fold_change_figure.tiff", p, width = 4.2, height = 4.0, dpi = 600,
+       compression = "lzw")
