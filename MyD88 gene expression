@@ -1,0 +1,168 @@
+# ------------------------------------------------------------------
+# MyD88 relative expression (2^-ddCt) in HC, GBS, MS and SLE
+# Individual-sample dot plot on a log2 fold-change axis
+# Shows median + IQR and Kruskal-Wallis p-value
+# ------------------------------------------------------------------
+# Requires: ggplot2
+# install.packages("ggplot2")
+# ------------------------------------------------------------------
+
+library(ggplot2)
+
+# ---- 1. Embedded MyD88 fold-change data --------------------------
+# Values below are copied from the workbook MyD88 fold-change blocks.
+# HC QC values are calculated from the embedded HC ddCt values.
+
+hc_ddCt <- c(
+  -1.576, -1.2085, -1.8608, 0.4260, 0.2808, 0.8042, 0.1538, 0.5370,
+  -0.5765, -1.2758, 1.2661, 0.1732, 2.4221, 2.8304, -0.2509,
+  -1.0717, -0.4887, -1.9688, 0.1705, -0.4192, -0.8018, 0.4011, 2.0335
+)
+
+hc_samples <- c(
+  "HC-08", "HC-9", "HC-10", "HC-13", "HC-14", "HC-15", "HC-16", "HC-19", "HC-20", "HC-21", "HC-22", "HC-23", "HC-24", "HC-25", "HC-28", "HC-29", "HC-30", "HC-31", "HC-32", "HC-33", "HC-34", "HC-35", "HC-36"
+)
+
+gbs_samples <- c(
+  "GBS-2", "GBS-03", "GBS-05", "GBS-06", "GBS-07", "GBS-08", "GBS-10", "GBS-13", "GBS-14", "GBS-15R", "GBS-16", "GBS-17", "GBS-18", "GBS-19", "GBS-20", "GBS-21", "GBS-22", "GBS-23", "GBS-24", "GBS-25", "GBS-26", "GBS-27", "GBS-28"
+)
+
+gbs_fc <- c(
+  0.572124091093905, 1.28307010567147, 1.93844526642625, 8.12067696506127, 2.67511330784262, 3.83333478054120, 2.15173438601526, 1.52573033947820, 4.18173024622827, 2.38931985773946, 1.11759695879236, 3.49622976768324, 4.34392742528918, 0.984525173337412, 1.06821348361668, 2.33189042787755, 4.76474828307319, 3.12271304047390, 0.957736041903490, 1.36983297996557, 0.502083771619487, 0.867658961887691, 6.55365623569849
+)
+
+ms_samples <- c(
+  "MS-1", "MS-02", "MS-04", "MS-05", "MS-06", "MS-7", "MS-08", "MS-09", "MS-10", "MS-11", "MS-12", "MS-13", "MS-14", "MS-15", "MS-16", "MS-18", "MS-19", "MS-20", "MS-21", "MS-22", "MS-23", "MS-24", "MS-25"
+)
+
+ms_fc <- c(
+  9.58580771012841, 4.53310632390537, 2.06122214862482, 1.93575987248737, 0.842179696412653, 0.640335544448869, 0.473553720125947, 1.84356719339291, 1.72859512783322, 3.28683719953044, 0.350892252664414, 2.41948500836118, 5.95953596233787, 2.90613152984923, 1.51131040168451, 2.86056474859824, 4.14967974626244, 3.39567880081032, 1.62833777865558, 4.30854275422554, 0.836826242683391, 2.44901226645832, 1.58798798848434
+)
+
+sle_samples <- c(
+  "SLE-02", "SLE-03", "SLE-04", "SLE-05", "SLE-06", "SLE-07", "SLE-08", "SLE-09", "SLE-10", "SLE-11", "SLE-12", "SLE-13", "SLE-15", "SLE-16", "SLE-17", "SLE-19", "SLE-21", "SLE-22", "SLE-23", "SLE-24", "SLE-25", "SLE-26", "SLE-27"
+)
+
+sle_fc <- c(
+  1.71119005136520, 1.28200332168452, 1.18402537509764, 2.12166958820875, 2.33318386108061, 2.82921143998512, 1.18377918953981, 1.56851573277233, 0.810284248095740, 1.75503524094084, 4.39450296408823, 1.73351461531710, 1.30323747977112, 2.63207390768905, 0.624381631140493, 2.08247618909712, 2.46399614689151, 2.08956118033882, 1.87241470447352, 1.49143385949145, 3.62655568159019, 2.81766481283466, 0.980031482381633
+)
+
+# Defensive checks: every group must contain 23 samples and 23 values.
+stopifnot(length(hc_samples) == 23, length(hc_ddCt) == 23)
+stopifnot(length(gbs_samples) == 23, length(gbs_fc) == 23)
+stopifnot(length(ms_samples) == 23, length(ms_fc) == 23)
+stopifnot(length(sle_samples) == 23, length(sle_fc) == 23)
+
+# Build the analysis data frame.
+d <- rbind(
+  data.frame(group = "HC",  sample = hc_samples,  fc = 2^(-hc_ddCt)),
+  data.frame(group = "GBS", sample = gbs_samples, fc = gbs_fc),
+  data.frame(group = "MS",  sample = ms_samples,  fc = ms_fc),
+  data.frame(group = "SLE", sample = sle_samples, fc = sle_fc)
+)
+
+group_order <- c("HC", "GBS", "MS", "SLE")
+d$group <- factor(d$group, levels = group_order)
+d$log2fc <- log2(d$fc)
+
+d$jitter <- rep(c(
+  0.045034, 0.142997, 0.099247, -0.098925, -0.071940, 0.134479,
+  -0.178104, 0.115642, 0.106945, -0.011543, -0.070908, -0.079767,
+  -0.088247, -0.019773, 0.001637, 0.019259, 0.178380, 0.105358,
+  0.043985, 0.176026, -0.102489, -0.122324, 0.040514
+), 4)
+d$x <- as.numeric(d$group) + d$jitter
+
+# ---- 2. Statistics ------------------------------------------------
+kw <- kruskal.test(fc ~ group, data = d)
+print(kw)
+
+# Optional Dunn-Holm table for reference.
+dunn_holm <- function(x, g) {
+  g <- factor(g)
+  N <- length(x)
+  r <- rank(x)
+  mr <- sapply(split(r, g), mean)
+  n <- sapply(split(r, g), length)
+  tt <- table(x)
+  tie <- 1 - sum(tt^3 - tt) / (N^3 - N)
+  pairs <- combn(levels(g), 2)
+  out <- data.frame(group1 = pairs[1, ], group2 = pairs[2, ])
+  out$z <- (mr[out$group1] - mr[out$group2]) /
+    sqrt(N * (N + 1) / 12 * tie *
+           (1 / n[out$group1] + 1 / n[out$group2]))
+  out$p <- 2 * pnorm(-abs(out$z))
+  out$p_holm <- p.adjust(out$p, method = "holm")
+  out
+}
+
+print(dunn_holm(d$fc, d$group))
+
+# ---- 3. Summary statistics for plot -------------------------------
+summ <- do.call(rbind, lapply(group_order, function(g) {
+  y <- d$log2fc[d$group == g]
+  q <- quantile(y, c(0.25, 0.50, 0.75), names = FALSE)
+  data.frame(group = g, xpos = match(g, group_order),
+             q1 = q[1], med = q[2], q3 = q[3], n = length(y))
+}))
+
+# ---- 4. Plot ------------------------------------------------------
+cols <- c(HC = "#2CA02C", GBS = "#1F77B4", MS = "#FF7F0E", SLE = "#D62728")
+y_min <- floor(min(d$log2fc, na.rm = TRUE) - 1)
+y_max <- ceiling(max(d$log2fc, na.rm = TRUE) + 1)
+ticks <- seq(y_min, y_max, by = 2)
+
+fmt_p <- function(p) {
+  if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)
+}
+
+p <- ggplot(d, aes(x = x, y = log2fc, colour = group)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_point(size = 1.9, alpha = 0.85) +
+  geom_segment(data = summ,
+               aes(x = xpos, xend = xpos, y = q1, yend = q3),
+               inherit.aes = FALSE, linewidth = 0.4, colour = "black") +
+  geom_segment(data = summ,
+               aes(x = xpos - 0.10, xend = xpos + 0.10, y = q1, yend = q1),
+               inherit.aes = FALSE, linewidth = 0.4, colour = "black") +
+  geom_segment(data = summ,
+               aes(x = xpos - 0.10, xend = xpos + 0.10, y = q3, yend = q3),
+               inherit.aes = FALSE, linewidth = 0.4, colour = "black") +
+  geom_segment(data = summ,
+               aes(x = xpos - 0.30, xend = xpos + 0.30, y = med, yend = med),
+               inherit.aes = FALSE, linewidth = 0.8, colour = "black") +
+  annotate("text", x = 0.5, y = y_max - 0.1, hjust = 0, vjust = 1,
+           size = 2.8, lineheight = 0.95,
+           label = paste0("Kruskal–Wallis\n", fmt_p(kw$p.value))) +
+  scale_colour_manual(values = cols, guide = "none") +
+  scale_x_continuous(
+    breaks = 1:4,
+    limits = c(0.4, 4.6),
+    labels = paste0(group_order, "\n(n = ", summ$n, ")"),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(
+    name = expression("MyD88 relative expression (log"[2]*" fold change)"),
+    breaks = ticks,
+    limits = c(y_min, y_max),
+    expand = c(0, 0),
+    sec.axis = sec_axis(
+      ~ ., name = "Fold change", breaks = ticks,
+      labels = function(x) format(2^x, trim = TRUE, scientific = FALSE)
+    )
+  ) +
+  labs(x = NULL) +
+  theme_classic(base_size = 9, base_family = "sans") +
+  theme(
+    axis.text = element_text(colour = "black"),
+    axis.line = element_line(linewidth = 0.4),
+    axis.ticks = element_line(linewidth = 0.4),
+    axis.line.x.top = element_blank()
+  )
+
+print(p)
+
+# ---- 5. Export ----------------------------------------------------
+ggsave("myd88_fold_change_figure.pdf", p, width = 4.2, height = 4.0, device = cairo_pdf)
+ggsave("myd88_fold_change_figure.png", p, width = 4.2, height = 4.0, dpi = 600)
+ggsave("myd88_fold_change_figure.tiff", p, width = 4.2, height = 4.0, dpi = 600, compression = "lzw")
