@@ -1,0 +1,107 @@
+# ------------------------------------------------------------------
+# RIG-1 relative expression (2^-ddCt) in HC, GBS, MS and SLE
+# Dot plot on a log2 fold-change axis: individual samples, median + IQR,
+# Kruskal-Wallis p-value and Dunn-Holm post-hoc table.
+# No pairwise comparison is significant after Holm correction.
+# Each sample's RIG-1 ddCt value is embedded below.
+# Requires: ggplot2 (install.packages("ggplot2"))
+# ------------------------------------------------------------------
+
+library(ggplot2)
+
+# ---- 1. Data: one row per sample ---------------------------------
+# ddCt = RIG-1 delta-delta Ct; fc = 2^(-ddCt)
+# jitter = fixed horizontal offset for each dot
+
+d <- data.frame(
+  group = c(rep("HC", 23), rep("GBS", 23), rep("MS", 23), rep("SLE", 23)),
+  sample = c(
+    "HC-08","HC-9","HC-10","HC-13","HC-14","HC-15","HC-16","HC-19","HC-20","HC-21","HC-22","HC-23","HC-24","HC-25","HC-28","HC-29","HC-30","HC-31","HC-32","HC-33","HC-34","HC-35","HC-36",
+    "GBS-2","GBS-03","GBS-05","GBS-06","GBS-07","GBS-08","GBS-10","GBS-13","GBS-14","GBS-15R","GBS-16","GBS-17","GBS-18","GBS-19","GBS-20","GBS-21","GBS-22","GBS-23","GBS-24","GBS-25","GBS-26","GBS-27","GBS-28",
+    "MS-1","MS-02","MS-04","MS-05","MS-06","MS-7","MS-08","MS-09","MS-10","MS-11","MS-12","MS-13","MS-14","MS-15","MS-16","MS-18","MS-19","MS-20","MS-21","MS-22","MS-23","MS-24","MS-25",
+    "SLE-02","SLE-03","SLE-04","SLE-05","SLE-06","SLE-07","SLE-08","SLE-09","SLE-10","SLE-11","SLE-12","SLE-13","SLE-15","SLE-16","SLE-17","SLE-19","SLE-21","SLE-22","SLE-23","SLE-24","SLE-25","SLE-26","SLE-27"
+  ),
+  ddCt = c(
+    -2.75026086956522, 1.60403913043478, -0.274060869565217, -0.132360869565217, 1.51313913043478, 0.0205391304347824, -1.40176086956522, -0.587060869565219, -0.043660869565219, -2.14866086956522, 5.02313913043478, 1.90643913043478, 3.01933913043478, 1.40983913043478, -1.46236086956522, -1.37836086956522, -0.569860869565218, -4.77976086956522, -1.61806086956522, 1.10233913043478, -1.54756086956522, -0.210960869565218, 3.30593913043479,
+    0.319439130434782, 1.32083913043478, -1.49546086956522, 1.34643913043478, 0.379939130434783, -1.51336086956522, -1.71936086956522, -1.77456086956522, -0.0335608695652159, -1.53756086956522, -0.0335608695652194, -3.32116086956522, 1.61233913043478, 0.0552391304347832, -1.17756086956522, -2.46196086956522, -1.16076086956522, -1.87246086956522, 0.0289391304347806, -2.20026086956522, -0.176760869565218, -0.269460869565219, -0.107260869565218,
+    0.774339130434781, -1.86086086956522, -0.591260869565218, -1.44636086956522, 0.162539130434782, 1.40423913043478, 0.432039130434781, -0.739860869565218, -2.60326086956522, -1.13546086956522, 1.79053913043478, -3.27436086956522, -1.53526086956522, -0.68736086956522, -2.44296086956522, 1.32263913043478, -1.56046086956522, -0.771660869565219, 1.61393913043478, -0.996560869565217, 1.67573913043478, 0.0106391304347806, -0.57846086956522,
+    -1.98776086956522, -1.52556086956522, -0.648160869565219, -2.87666086956522, -2.40706086956522, -1.07836086956522, 0.174839130434782, -0.681560869565217, -0.296160869565218, -0.381860869565219, -0.469060869565217, -0.358560869565217, -1.29776086956522, -2.97666086956522, -0.634260869565216, -2.98216086956522, -1.18106086956522, -0.414660869565218, -1.87646086956522, -2.69926086956522, -0.66736086956522, -1.32396086956522, -0.000160869565215549
+  ),
+  jitter = rep(c(0.045034,0.142997,0.099247,-0.098925,-0.071940,0.134479,-0.178104,0.115642,0.106945,-0.011543,-0.070908,-0.079767,-0.088247,-0.019773,0.001637,0.019259,0.178380,0.105358,0.043985,0.176026,-0.102489,-0.122324,0.040514), times = 4),
+  stringsAsFactors = FALSE
+)
+
+d$fc <- 2^(-d$ddCt)
+group_order <- c("HC", "GBS", "MS", "SLE")
+d$group <- factor(d$group, levels = group_order)
+d$x <- as.numeric(d$group) + d$jitter
+d$log2fc <- log2(d$fc)
+
+# ---- 2. Statistics ------------------------------------------------
+kw <- kruskal.test(fc ~ group, data = d)
+kw_p <- kw$p.value
+print(kw)
+
+dunn_holm <- function(x, g) {
+  g <- factor(g)
+  N <- length(x)
+  r <- rank(x)
+  mr <- sapply(split(r, g), mean)
+  n <- sapply(split(r, g), length)
+  tt <- table(x)
+  tie <- 1 - sum(tt^3 - tt) / (N^3 - N)
+  pr <- combn(levels(g), 2)
+  res <- data.frame(a = pr[1, ], b = pr[2, ], stringsAsFactors = FALSE)
+  res$z <- (mr[res$a] - mr[res$b]) /
+    sqrt(N * (N + 1) / 12 * tie * (1 / n[res$a] + 1 / n[res$b]))
+  res$p <- 2 * pnorm(-abs(res$z))
+  res$p_holm <- p.adjust(res$p, method = "holm")
+  res
+}
+
+dunn <- dunn_holm(d$fc, d$group)
+print(dunn)
+
+fmt_p <- function(p) if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)
+
+summ <- do.call(rbind, lapply(group_order, function(g) {
+  y <- d$log2fc[d$group == g]
+  q <- quantile(y, c(0.25, 0.5, 0.75))
+  data.frame(group = g, xpos = match(g, group_order), q1 = q[[1]], med = q[[2]], q3 = q[[3]], n = length(y))
+}))
+
+cols <- c(HC = "#2CA02C", GBS = "#1F77B4", MS = "#FF7F0E", SLE = "#D62728")
+ticks <- seq(-6, 6, by = 2)
+
+# ---- 3. Plot ------------------------------------------------------
+p <- ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_point(data = d, aes(x = x, y = log2fc, colour = group), size = 1.9, alpha = 0.85) +
+  geom_segment(data = summ, aes(x = xpos, xend = xpos, y = q1, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q1, yend = q1), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q3, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.30, xend = xpos + 0.30, y = med, yend = med), linewidth = 0.8) +
+  annotate("text", x = 0.5, y = 7.35, hjust = 0, vjust = 1, size = 2.8, lineheight = 0.95,
+           label = paste0("Kruskal–Wallis\n", fmt_p(kw_p))) +
+  scale_colour_manual(values = cols, guide = "none") +
+  scale_x_continuous(breaks = 1:4, limits = c(0.4, 4.6),
+                     labels = paste0(group_order, "\n(n = ", summ$n, ")"), expand = c(0, 0)) +
+  scale_y_continuous(
+    name = expression("RIG-1 relative expression (log"[2]*" fold change)"),
+    breaks = ticks, limits = c(-6.6, 7.4), expand = c(0, 0),
+    sec.axis = sec_axis(~ ., name = "Fold change", breaks = ticks,
+                        labels = c("1/64", "1/16", "1/4", "1", "4", "16", "64"))
+  ) +
+  labs(x = NULL) +
+  theme_classic(base_size = 9, base_family = "sans") +
+  theme(axis.text = element_text(colour = "black"),
+        axis.line = element_line(linewidth = 0.4),
+        axis.ticks = element_line(linewidth = 0.4),
+        axis.line.x.top = element_blank())
+
+print(p)
+
+# ---- 4. Export ----------------------------------------------------
+ggsave("rig1_fold_change_figure.pdf", p, width = 4.2, height = 4.0, device = cairo_pdf)
+ggsave("rig1_fold_change_figure.png", p, width = 4.2, height = 4.0, dpi = 600)
+ggsave("rig1_fold_change_figure.tiff", p, width = 4.2, height = 4.0, dpi = 600, compression = "lzw")
