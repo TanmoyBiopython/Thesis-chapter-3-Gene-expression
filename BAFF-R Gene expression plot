@@ -1,0 +1,174 @@
+# ------------------------------------------------------------------
+# BAFFR relative expression (2^-ddCt) in HC, GBS, MS and SLE
+# Dot plot on a log2 fold-change axis: individual samples, median + IQR,
+# Kruskal-Wallis p-value. Reproduces baffr_fold_change_figure.*
+# Requires: ggplot2 (install.packages("ggplot2"))
+# ------------------------------------------------------------------
+library(ggplot2)
+
+# ---- 1. Data: one row per sample ---------------------------------
+# fc     = BAFFR fold change, 2^-ddCt (B2M-normalised, calibrated to HC mean)
+# jitter = fixed horizontal offset for each dot (so the figure is identical every run)
+d <- data.frame(matrix(c(
+  "HC", "HC-08", 4.77183275, 0.045034,
+  "HC", "HC-9", 0.7057570196, 0.142997,
+  "HC", "HC-10", 0.6698655568, 0.099247,
+  "HC", "HC-13", 0.1261702325, -0.098925,
+  "HC", "HC-14", 0.1734081341, -0.071940,
+  "HC", "HC-15", 2.081095943, 0.134479,
+  "HC", "HC-16", 2.047471653, -0.178104,
+  "HC", "HC-19", 0.1693692036, 0.115642,
+  "HC", "HC-20", 1.456639102, 0.106945,
+  "HC", "HC-21", 0.4566445368, -0.011543,
+  "HC", "HC-22", 0.5044011529, -0.070908,
+  "HC", "HC-23", 5.005601628, -0.079767,
+  "HC", "HC-24", 0.3700118751, -0.088247,
+  "HC", "HC-25", 0.1464564339, -0.019773,
+  "HC", "HC-28", 2.256275877, 0.001637,
+  "HC", "HC-29", 1.061675944, 0.019259,
+  "HC", "HC-30", 0.6190996197, 0.178380,
+  "HC", "HC-31", 0.8755390787, 0.105358,
+  "HC", "HC-32", 4.971369989, 0.043985,
+  "HC", "HC-33", 252.1159318, 0.176026,
+  "HC", "HC-34", 4.729355129, -0.102489,
+  "HC", "HC-35", 0.1536418854, -0.122324,
+  "HC", "HC-36", 0.2608592466, 0.040514,
+  "GBS", "GBS-2", 0.01573088315, -0.164181,
+  "GBS", "GBS-03", 0.2171168317, -0.167155,
+  "GBS", "GBS-05", 0.8599612023, 0.005360,
+  "GBS", "GBS-06", 0.8271629539, -0.012166,
+  "GBS", "GBS-07", 1.241723087, 0.150180,
+  "GBS", "GBS-08", 1.023877756, 0.046521,
+  "GBS", "GBS-10", 0.01845100843, 0.005082,
+  "GBS", "GBS-13", 0.2389769666, -0.001126,
+  "GBS", "GBS-14", 0.8731754529, -0.090895,
+  "GBS", "GBS-15R", 2.471596916, -0.175754,
+  "GBS", "GBS-16", 0.08324130992, -0.110735,
+  "GBS", "GBS-17", 1.02565354, 0.069132,
+  "GBS", "GBS-18", 0.7126884645, -0.107782,
+  "GBS", "GBS-19", 2.406678581, -0.046967,
+  "GBS", "GBS-20", 0.3136100022, -0.178656,
+  "GBS", "GBS-21", 0.6444067353, 0.118817,
+  "GBS", "GBS-22", 1.262377571, -0.124394,
+  "GBS", "GBS-23", 0.11911636, -0.083664,
+  "GBS", "GBS-24", 0.08631430433, 0.136920,
+  "GBS", "GBS-25", 1.291138242, 0.003525,
+  "GBS", "GBS-26", 0.4125507413, 0.124974,
+  "GBS", "GBS-27", 1.490342045, 0.050298,
+  "GBS", "GBS-28", 2.714419084, 0.087038,
+  "MS", "MS-1", 2.36730153, -0.147062,
+  "MS", "MS-02", 0.7295827266, 0.014812,
+  "MS", "MS-04", 0.04528394566, 0.002798,
+  "MS", "MS-05", 0.3989122904, 0.133682,
+  "MS", "MS-06", 0.1235223045, -0.049945,
+  "MS", "MS-7", 0.04940645926, 0.035346,
+  "MS", "MS-08", 0.08654795121, -0.158669,
+  "MS", "MS-09", 0.4489863463, -0.040453,
+  "MS", "MS-10", 0.9645603944, -0.063707,
+  "MS", "MS-11", 0.1460610567, -0.125928,
+  "MS", "MS-12", 0.2706768629, 0.113882,
+  "MS", "MS-13", 1.126497005, -0.043399,
+  "MS", "MS-14", 0.1154342684, 0.172349,
+  "MS", "MS-15", 0.8661227919, 0.032397,
+  "MS", "MS-16", 1.475847319, 0.037820,
+  "MS", "MS-18", 0.02899491016, 0.049679,
+  "MS", "MS-19", 3.557943198, 0.063522,
+  "MS", "MS-20", 0.9177311476, -0.125716,
+  "MS", "MS-21", 0.234529853, -0.021487,
+  "MS", "MS-22", 2.069587834, -0.093757,
+  "MS", "MS-23", 0.06136005041, -0.035101,
+  "MS", "MS-24", 0.5221164354, -0.145187,
+  "MS", "MS-25", 0.5293315232, 0.168418,
+  "SLE", "SLE-02", 0.7742350245, -0.102599,
+  "SLE", "SLE-03", 0.5557251656, 0.061835,
+  "SLE", "SLE-04", 0.5143575469, -0.071849,
+  "SLE", "SLE-05", 0.6321082188, 0.134668,
+  "SLE", "SLE-06", 1.315620577, 0.058397,
+  "SLE", "SLE-07", 0.8204819371, -0.132618,
+  "SLE", "SLE-08", 0.3091852666, 0.124227,
+  "SLE", "SLE-09", 0.06799363352, 0.160181,
+  "SLE", "SLE-10", 0.1956088404, 0.145410,
+  "SLE", "SLE-11", 0.1153622792, 0.025099,
+  "SLE", "SLE-12", 5.033435678, -0.127634,
+  "SLE", "SLE-13", 0.235360395, -0.110713,
+  "SLE", "SLE-15", 0.4351677288, 0.154046,
+  "SLE", "SLE-16", 1.068912291, 0.018838,
+  "SLE", "SLE-17", 0.9458894457, -0.115001,
+  "SLE", "SLE-19", 0.2975168902, 0.138260,
+  "SLE", "SLE-21", 0.2105366756, 0.050966,
+  "SLE", "SLE-22", 0.2482633972, 0.025090,
+  "SLE", "SLE-23", 0.05222713874, -0.044536,
+  "SLE", "SLE-24", 0.4354996542, -0.032056,
+  "SLE", "SLE-25", 0.3745274791, -0.093784,
+  "SLE", "SLE-26", 0.02899491016, -0.166299,
+  "SLE", "SLE-27", 1.801805742, 0.135439
+), ncol = 4, byrow = TRUE), stringsAsFactors = FALSE)
+names(d) <- c("group", "sample", "fc", "jitter")
+d$fc     <- as.numeric(d$fc)
+d$jitter <- as.numeric(d$jitter)
+
+group_order <- c("HC", "GBS", "MS", "SLE")
+d$group <- factor(d$group, levels = group_order)
+d$x     <- as.numeric(d$group) + d$jitter
+d$log2fc <- log2(d$fc)
+d$flagged <- d$sample == "HC-33"      # QC-flagged outlier (outlying replicate well)
+
+# ---- 2. Statistics ------------------------------------------------
+kw   <- kruskal.test(fc ~ group, data = d)
+kw_p <- kw$p.value                    # 0.1647 (H = 5.098, df = 3)
+print(kw)
+
+# median and IQR on the log2 scale (R default quantile type 7)
+summ <- do.call(rbind, lapply(group_order, function(g) {
+  y <- d$log2fc[d$group == g]
+  q <- quantile(y, c(0.25, 0.5, 0.75))
+  data.frame(group = g, xpos = match(g, group_order),
+             q1 = q[[1]], med = q[[2]], q3 = q[[3]], n = length(y))
+}))
+
+cols <- c(HC = "#2CA02C", GBS = "#1F77B4", MS = "#FF7F0E", SLE = "#D62728")
+
+# ---- 3. Plot ------------------------------------------------------
+ticks <- seq(-6, 8, by = 2)
+
+p <- ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  # individual samples (filled), HC-33 shown as an open circle
+  geom_point(data = d[!d$flagged, ], aes(x = x, y = log2fc, colour = group),
+             size = 1.9, alpha = 0.85) +
+  geom_point(data = d[d$flagged, ], aes(x = x, y = log2fc),
+             shape = 1, size = 2.8, stroke = 0.7, colour = cols[["HC"]]) +
+  annotate("text", x = d$x[d$flagged] + 0.17, y = d$log2fc[d$flagged],
+           label = "HC-33\n(QC-flagged)", hjust = 0, size = 2.5, lineheight = 0.9) +
+  # IQR whiskers with caps, then median line
+  geom_segment(data = summ, aes(x = xpos, xend = xpos, y = q1, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q1, yend = q1), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.10, xend = xpos + 0.10, y = q3, yend = q3), linewidth = 0.4) +
+  geom_segment(data = summ, aes(x = xpos - 0.30, xend = xpos + 0.30, y = med, yend = med), linewidth = 0.8) +
+  # Kruskal-Wallis label
+  annotate("text", x = 3.55, y = 9.15, hjust = 1, vjust = 1, size = 2.8, lineheight = 0.95,
+           label = sprintf("Kruskal\u2013Wallis\np = %.3f", kw_p)) +
+  scale_colour_manual(values = cols, guide = "none") +
+  scale_x_continuous(breaks = 1:4, limits = c(0.4, 4.6),
+                     labels = paste0(group_order, "\n(n = ", summ$n, ")"),
+                     expand = c(0, 0)) +
+  scale_y_continuous(
+    name   = expression("BAFFR relative expression (log"[2]*" fold change)"),
+    breaks = ticks, limits = c(-6.8, 9.3), expand = c(0, 0),
+    sec.axis = sec_axis(~ ., name = "Fold change", breaks = ticks,
+                        labels = c("1/64", "1/16", "1/4", "1", "4", "16", "64", "256"))
+  ) +
+  labs(x = NULL) +
+  theme_classic(base_size = 9, base_family = "sans") +
+  theme(axis.text  = element_text(colour = "black"),
+        axis.line  = element_line(linewidth = 0.4),
+        axis.ticks = element_line(linewidth = 0.4),
+        axis.line.x.top = element_blank())
+
+print(p)
+
+# ---- 4. Export (4.2 x 4.0 in) -------------------------------------
+ggsave("baffr_fold_change_figure.pdf",  p, width = 4.2, height = 4.0, device = cairo_pdf)
+ggsave("baffr_fold_change_figure.png",  p, width = 4.2, height = 4.0, dpi = 600)
+ggsave("baffr_fold_change_figure.tiff", p, width = 4.2, height = 4.0, dpi = 600,
+       compression = "lzw")
